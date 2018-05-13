@@ -1,0 +1,19 @@
+{
+  "name": "xivanalysis-server",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "nodemon src/index.js --exec babel-node",
+    "build": "rimraf build && babel src -d build",
+    "serve": "node build/index.js"
+  },
+  "dependencies": {
+    "koa": "^2.5.1"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^1.7.0",
+    "nodemon": "^1.17.4",
+    "rimraf": "^2.6.2"
+  }
+}
