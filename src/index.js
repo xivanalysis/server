@@ -1,9 +1,14 @@
 import 'dotenv/config' // NOTE: This will need changing if we split this file.
 import Koa from 'koa'
+
+import compress from 'koa-compress'
 import Router from 'koa-router'
 import serve from 'koa-static'
 
 const app = new Koa()
+
+// Shrink that stuff up a bit
+app.use(compress())
 
 // Serve the main public assets
 // TODO: Would be nice to be able to hit a url without the /#/
