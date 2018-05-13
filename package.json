@@ -8,6 +8,7 @@
     "serve": "node build/index.js"
   },
   "dependencies": {
+    "dotenv": "^5.0.1",
     "koa": "^2.5.1"
   },
   "devDependencies": {
