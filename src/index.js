@@ -1,4 +1,4 @@
-import 'dotenv/config' // NOTE: This will need changing if we split this file.
+import 'dotenv/config'
 import Koa from 'koa'
 
 import compress from 'koa-compress'
