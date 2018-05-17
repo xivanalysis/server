@@ -22,11 +22,12 @@ proxy.use(async ctx => {
 
 	// Build the URL that we'll be requesting (and using as a key!)
 	const url = ctx.request.url
+	const key = 'proxy:fflogs:' + url
 
 	// Check if we have a cached copy, return that if we do
-	const key = 'proxy:fflogs:' + url
-	if (await redis.exists(key)) {
-		ctx.body = await redis.get(key)
+	const cached = await redis.get(key)
+	if (cached) {
+		ctx.body = cached
 		return
 	}
 
