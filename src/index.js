@@ -29,13 +29,19 @@ app.use(router.allowedMethods())
 
 // FFLogs proxy
 const fflogsApi = axios.create({
-	baseURL: 'https://www.fflogs.com/v1/',
-	params: {
-		api_key: process.env.FFLOGS_API_KEY
-	}
+	baseURL: 'https://www.fflogs.com/v1/'
 })
 
 app.use(mount('/proxy/fflogs', async ctx => {
+	// Default to our api key, but allow overrides
+	let apiKey = process.env.FFLOGS_API_KEY
+	const query = ctx.query
+	if (query.api_key) {
+		apiKey = query.api_key
+		delete query.api_key
+		ctx.query = query
+	}
+
 	// Build the URL that we'll be requesting (and using as a key!)
 	const url = ctx.request.url
 
@@ -49,7 +55,9 @@ app.use(mount('/proxy/fflogs', async ctx => {
 	// No cached copy, grab it down
 	let response = null
 	try {
-		response = await fflogsApi.get(url)
+		response = await fflogsApi.get(url, {
+			params: {api_key: apiKey}
+		})
 	} catch(e) {
 		// TODO: Handle this better.
 		ctx.body = JSON.stringify([e.response.status, e.response.data])
