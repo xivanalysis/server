@@ -8,10 +8,12 @@
     "serve": "node build/index.js"
   },
   "dependencies": {
+    "axios": "^0.18.0",
     "dotenv": "^5.0.1",
     "ioredis": "^3.2.2",
     "koa": "^2.5.1",
     "koa-compress": "^3.0.0",
+    "koa-mount": "^3.0.0",
     "koa-router": "^7.4.0",
     "koa-static": "^4.0.2"
   },
