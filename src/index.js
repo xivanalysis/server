@@ -7,7 +7,7 @@ import Router from 'koa-router'
 import serve from 'koa-static'
 
 const app = new Koa()
-const redis = new Redis(process.env.REDIS_URL)
+const redis = new Redis(process.env.REDIS_DSN)
 
 // Shrink that stuff up a bit
 app.use(compress())
