@@ -8,6 +8,7 @@
     "serve": "node build/index.js"
   },
   "dependencies": {
+    "@koa/cors": "2",
     "axios": "^0.18.0",
     "dotenv": "^5.0.1",
     "ioredis": "^3.2.2",

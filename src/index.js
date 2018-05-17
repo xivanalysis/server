@@ -4,6 +4,7 @@ import Koa from 'koa'
 import Redis from 'ioredis'
 
 import compress from 'koa-compress'
+import cors from '@koa/cors'
 import mount from 'koa-mount'
 import Router from 'koa-router'
 import serve from 'koa-static'
@@ -13,6 +14,9 @@ const redis = new Redis(process.env.REDIS_DSN)
 
 // Shrink that stuff up a bit
 app.use(compress())
+
+// Loosen up CORS a bit
+app.use(cors())
 
 // Serve the main public assets
 // TODO: Would be nice to be able to hit a url without the /#/
