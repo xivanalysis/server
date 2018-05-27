@@ -23,7 +23,6 @@ app.use(compress())
 app.use(cors())
 
 // Serve the main public assets
-// TODO: Would be nice to be able to hit a url without the /#/
 app.use(serve(publicPath))
 
 // Mount the fancy stuff
