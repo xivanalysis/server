@@ -1,6 +1,7 @@
 import 'babel-polyfill'
 import 'dotenv/config'
 import Koa from 'koa'
+import Raven from 'raven'
 
 import compress from 'koa-compress'
 import cors from '@koa/cors'
@@ -10,6 +11,11 @@ import serve from 'koa-static'
 
 import api from './api'
 import proxy from './proxy'
+
+// Set up Sentry
+if (process.env.NODE_ENV === 'production' && process.env.RAVEN_DSN) {
+	Raven.config(process.env.RAVEN_DSN).install()
+}
 
 // Public url to serve SPA stuff from
 const publicPath = process.env.PUBLIC_PATH || 'public'
