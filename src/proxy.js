@@ -21,7 +21,7 @@ proxy.use(async ctx => {
 	}
 
 	// Build the URL that we'll be requesting (and using as a key!)
-	const url = ctx.request.url
+	const url = ctx.url
 	const key = 'proxy:fflogs:' + url
 
 	// Check if we have a cached copy, return that if we do
@@ -38,8 +38,9 @@ proxy.use(async ctx => {
 			params: { api_key: apiKey }
 		})
 	} catch (e) {
-		// TODO: Handle this better.
-		ctx.body = JSON.stringify([e.response.status, e.response.data])
+		// Forwarding the error to the client, bypassing cache
+		ctx.status = e.response.status
+		ctx.body = e.response.data
 		return
 	}
 
