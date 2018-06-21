@@ -10,6 +10,9 @@ const fflogsApi = axios.create({
 	baseURL: 'https://www.fflogs.com/v1/'
 })
 
+// 7 days (in seconds)
+const PROXY_CACHE_EXPIRY = 60 * 60 * 24 * 7
+
 proxy.use(async ctx => {
 	// Default to our api key, but allow overrides
 	let apiKey = process.env.FFLOGS_API_KEY
@@ -46,7 +49,7 @@ proxy.use(async ctx => {
 
 	// Save and respond
 	const data = response.data
-	redis.set(key, JSON.stringify(data))
+	redis.set(key, JSON.stringify(data), 'EX', PROXY_CACHE_EXPIRY)
 	ctx.body = data
 })
 
