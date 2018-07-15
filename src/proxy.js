@@ -20,18 +20,27 @@ proxy.use(async ctx => {
 	if (query.api_key) {
 		apiKey = query.api_key
 		delete query.api_key
-		ctx.query = query
 	}
+
+	// Allow bypassing the cache w/ special param
+	// TODO: Limit to users w/ their own keys?
+	const bypassCache = query.bypassCache || false
+	delete query.bypassCache
+
+	// Make sure any changes we've made to the query are taken into account
+	ctx.query = query
 
 	// Build the URL that we'll be requesting (and using as a key!)
 	const url = ctx.url
 	const key = 'proxy:fflogs:' + url
 
-	// Check if we have a cached copy, return that if we do
-	const cached = await redis.get(key)
-	if (cached) {
-		ctx.body = cached
-		return
+	if (bypassCache !== 'true') {
+		// Check if we have a cached copy, return that if we do
+		const cached = await redis.get(key)
+		if (cached) {
+			ctx.body = cached
+			return
+		}
 	}
 
 	// No cached copy, grab it down
