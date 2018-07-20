@@ -37,6 +37,10 @@ app.use(mount('/proxy/fflogs', proxy))
 
 // All other urls should serve up the index file, routing is handled by the SPA
 app.use(async ctx => {
+	// Don't do the fallback for files in /static, though - that just causes syntax errors when things go wrong
+	if (ctx.url.startsWith('/static')) {
+		return
+	}
 	await send(ctx, 'index.html', {root: publicPath})
 })
 
