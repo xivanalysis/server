@@ -7,10 +7,11 @@ const proxy = new Koa()
 
 // FFLogs proxy
 const fflogsApi = axios.create({
-	baseURL: 'https://www.fflogs.com/v1/'
+	baseURL: 'https://www.fflogs.com/v1/',
 })
 
 // 7 days (in seconds)
+// eslint-disable-next-line no-magic-numbers
 const PROXY_CACHE_EXPIRY = 60 * 60 * 24 * 7
 
 proxy.use(async ctx => {
@@ -47,7 +48,7 @@ proxy.use(async ctx => {
 	let response = null
 	try {
 		response = await fflogsApi.get(url, {
-			params: { api_key: apiKey }
+			params: {api_key: apiKey},
 		})
 	} catch (e) {
 		// Forwarding the error to the client, bypassing cache

@@ -12,6 +12,9 @@ import serve from 'koa-static'
 import api from './api'
 import proxy from './proxy'
 
+// Defaults
+const DEFAULT_PORT = 3001
+
 // Set up Sentry
 if (process.env.NODE_ENV === 'production' && process.env.RAVEN_DSN) {
 	Raven.config(process.env.RAVEN_DSN).install()
@@ -45,4 +48,4 @@ app.use(async ctx => {
 })
 
 // Boot the server
-app.listen(process.env.PORT || 3001)
+app.listen(process.env.PORT || DEFAULT_PORT)
