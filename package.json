@@ -24,7 +24,10 @@
   },
   "devDependencies": {
     "babel-cli": "^6.26.0",
+    "babel-eslint": "^9.0.0",
     "babel-preset-env": "^1.7.0",
+    "eslint": "^5.5.0",
+    "eslint-plugin-xivanalysis": "xivanalysis/linter",
     "nodemon": "^1.17.4",
     "rimraf": "^2.6.2"
   }
