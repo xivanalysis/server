@@ -1,4 +1,4 @@
-import 'babel-polyfill'
+import '@babel/polyfill'
 import 'dotenv/config'
 import Koa from 'koa'
 import Raven from 'raven'
