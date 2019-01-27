@@ -9,12 +9,13 @@ const app = new Koa()
 const router = new Router()
 
 const XIVAPI_BASE_URL = 'https://xivapi.com'
+const XIVAPI_API_KEY = process.env.XIVAPI_API_KEY
 
 // Set up base params to connect to xivapi
 const xivapi = axios.create({
 	baseURL: XIVAPI_BASE_URL,
 	params: {
-		key: 'ea807e43a1524c31bcdc0cbd',
+		key: XIVAPI_API_KEY,
 	},
 })
 
@@ -28,11 +29,16 @@ router.get('/zone-banner/:zoneId(\\d+)', async ctx => {
 	// If we don't have a cached path, get a fresh one from the api
 	if (!banner) {
 		// Spooky magic request that gets what we need
-		const {data} = await xivapi.get('search', {params: {
-			indexes: 'InstanceContent',
-			filters: `ContentFinderCondition.TerritoryTypeTargetID=${zoneId}`,
-			columns: 'Banner',
-		}})
+		let data
+		try {
+			({data} = await xivapi.get('search', {params: {
+				indexes: 'InstanceContent',
+				filters: `ContentFinderCondition.TerritoryTypeTargetID=${zoneId}`,
+				columns: 'Banner',
+			}}))
+		} catch (error) {
+			ctx.throw(error.response.status, JSON.stringify(error.response.data))
+		}
 
 		// If there's no results, tell the user off for being a numpty
 		if (data.Pagination.Results === 0) {
