@@ -11,6 +11,7 @@ import serve from 'koa-static'
 
 import assetPath from './assetPath'
 import fflogsProxy from './fflogsProxy'
+import xivapi from './xivapi'
 
 // Defaults
 const DEFAULT_PORT = 3001
@@ -36,6 +37,7 @@ app.use(async (ctx, ...rest) => serve(ctx.state.assetPath)(ctx, ...rest))
 
 // Mount the fancy stuff
 app.use(mount('/proxy/fflogs', fflogsProxy))
+app.use(mount('/xivapi', xivapi))
 
 // All other urls should serve up the index file, routing is handled by the SPA
 app.use(async ctx => {
