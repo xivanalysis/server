@@ -11,6 +11,10 @@ const router = new Router()
 const XIVAPI_BASE_URL = 'https://xivapi.com'
 const XIVAPI_API_KEY = process.env.XIVAPI_API_KEY
 
+// 1 month(ish) (in seconds)
+// eslint-disable-next-line no-magic-numbers
+const PROXY_CACHE_EXPIRY = 60 * 60 * 24 * 30
+
 // Set up base params to connect to xivapi
 const xivapi = axios.create({
 	baseURL: XIVAPI_BASE_URL,
@@ -48,7 +52,7 @@ router.get('/zone-banner/:zoneId(\\d+)', async ctx => {
 
 		// Grab the banner and fire off a set (don't need to wait)
 		banner = data.Results[0].Banner
-		redis.set(key, banner)
+		redis.set(key, banner, 'EX', PROXY_CACHE_EXPIRY)
 	}
 
 	// 303 to the image, we're acting as a pass-through "nice" url
