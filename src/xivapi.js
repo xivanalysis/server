@@ -19,7 +19,7 @@ const PROXY_CACHE_EXPIRY = 60 * 60 * 24 * 30
 const xivapi = axios.create({
 	baseURL: XIVAPI_BASE_URL,
 	params: {
-		key: XIVAPI_API_KEY,
+		private_key: XIVAPI_API_KEY,
 	},
 })
 
