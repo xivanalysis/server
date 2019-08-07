@@ -1,7 +1,11 @@
 import axios from 'axios'
 import Koa from 'koa'
+import {promisify} from 'util'
+import {gzip, gunzip} from 'zlib'
 
 import redis from './redis'
+
+const asyncGunzip = promisify(gunzip)
 
 const proxy = new Koa()
 
@@ -37,9 +41,12 @@ proxy.use(async ctx => {
 
 	if (bypassCache !== 'true') {
 		// Check if we have a cached copy, return that if we do
-		const cached = await redis.get(key)
+		const cached = await redis.getBuffer(key)
 		if (cached) {
-			ctx.body = cached
+			// TODO: We're basically gunzipping it so koa can gzip it again for us
+			//       Look into pissing about with it so that's not nessecary.
+			const respBuf = await asyncGunzip(cached)
+			ctx.body = respBuf.toString()
 			return
 		}
 	}
@@ -57,10 +64,15 @@ proxy.use(async ctx => {
 		return
 	}
 
-	// Save and respond
-	const data = response.data
-	redis.set(key, JSON.stringify(data), 'EX', PROXY_CACHE_EXPIRY)
+	// Set the response
+	const {data} = response
 	ctx.body = data
+
+	// Save it to the cache in the background (don't need to wait)
+	gzip(JSON.stringify(data), (err, buf) => {
+		if (err) { throw err }
+		redis.set(key, buf, 'EX', PROXY_CACHE_EXPIRY)
+	})
 })
 
 export default proxy
