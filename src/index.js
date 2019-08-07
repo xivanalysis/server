@@ -1,4 +1,5 @@
-import '@babel/polyfill'
+import 'core-js/stable'
+import 'regenerator-runtime/runtime'
 import 'dotenv/config'
 import Koa from 'koa'
 import Raven from 'raven'

@@ -9,9 +9,9 @@
     "serve": "node build/index.js"
   },
   "dependencies": {
-    "@babel/polyfill": "^7",
     "@koa/cors": "^2",
     "axios": "^0.18.0",
+    "core-js": "^3.1.4",
     "dotenv": "^6",
     "ioredis": "^4",
     "koa": "^2.5.1",
@@ -20,7 +20,8 @@
     "koa-router": "^7.4.0",
     "koa-send": "^5",
     "koa-static": "^5",
-    "raven": "^2.6.2"
+    "raven": "^2.6.2",
+    "regenerator-runtime": "^0.13.3"
   },
   "devDependencies": {
     "@babel/cli": "^7",
