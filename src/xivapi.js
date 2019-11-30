@@ -36,9 +36,9 @@ router.get('/zone-banner/:zoneId(\\d+)', async ctx => {
 		let data
 		try {
 			({data} = await xivapi.get('search', {params: {
-				indexes: 'InstanceContent',
-				filters: `ContentFinderCondition.TerritoryTypeTargetID=${zoneId}`,
-				columns: 'Banner',
+				indexes: 'ContentFinderCondition',
+				filters: `TerritoryTypeTargetID=${zoneId}`,
+				columns: 'Image',
 			}}))
 		} catch (error) {
 			ctx.throw(error.response.status, JSON.stringify(error.response.data))
@@ -51,7 +51,7 @@ router.get('/zone-banner/:zoneId(\\d+)', async ctx => {
 		}
 
 		// Grab the banner and fire off a set (don't need to wait)
-		banner = data.Results[0].Banner
+		banner = data.Results[0].Image
 		redis.set(key, banner, 'EX', PROXY_CACHE_EXPIRY)
 	}
 
