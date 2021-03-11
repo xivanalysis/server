@@ -68,6 +68,12 @@ proxy.use(async ctx => {
 	const {data} = response
 	ctx.body = data
 
+	// If data is a string, it's a relatively safe bet that upstream has an error. Avoid cachine and send a 500.
+	if (typeof data === 'string') {
+		ctx.status = 500
+		return
+	}
+
 	// Save it to the cache in the background (don't need to wait)
 	gzip(JSON.stringify(data), (err, buf) => {
 		if (err) { throw err }
