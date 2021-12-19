@@ -32,26 +32,24 @@ router.get('/zone-banner/:zoneId(\\d+)', async ctx => {
 
 	// If we don't have a cached path, get a fresh one from the api
 	if (!banner) {
-		// Spooky magic request that gets what we need
 		let data
 		try {
-			({data} = await xivapi.get('search', {params: {
-				indexes: 'ContentFinderCondition',
-				filters: `TerritoryTypeTargetID=${zoneId}`,
-				columns: 'Image',
+			({data} = await xivapi.get(`TerritoryType/${zoneId}`, {params: {
+				columns: 'ContentFinderCondition.Image',
 			}}))
 		} catch (error) {
 			ctx.throw(error.response.status, JSON.stringify(error.response.data))
 		}
 
+		banner = data.ContentFinderCondition.Image
+
 		// If there's no results, tell the user off for being a numpty
-		if (data.Pagination.Results === 0) {
+		if (banner == null) {
 			// eslint-disable-next-line no-magic-numbers
 			ctx.throw(400, 'invalid zone id provided')
 		}
 
 		// Grab the banner and fire off a set (don't need to wait)
-		banner = data.Results[0].Image
 		redis.set(key, banner, 'EX', PROXY_CACHE_EXPIRY)
 	}
 

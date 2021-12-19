@@ -68,7 +68,7 @@ proxy.use(async ctx => {
 	const {data} = response
 	ctx.body = data
 
-	// If data is a string, it's a relatively safe bet that upstream has an error. Avoid cachine and send a 500.
+	// If data is a string, it's a relatively safe bet that upstream has an error. Avoid caching and send a 500.
 	if (typeof data === 'string') {
 		ctx.status = 500
 		return
