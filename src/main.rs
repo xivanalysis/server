@@ -1,11 +1,19 @@
-use std::{net::SocketAddr, str::FromStr};
+use std::{collections::HashMap, net::SocketAddr, str::FromStr};
 
 use anyhow::Context;
-use axum::{debug_handler, response::IntoResponse, routing::get, serve, Router};
+use axum::{
+	body::Body,
+	debug_handler,
+	extract::{Path, Query, State},
+	response::IntoResponse,
+	routing::get,
+	serve, Router,
+};
 use figment::{
 	providers::{Env, Format, Toml},
 	Figment,
 };
+use reqwest::Client;
 use serde::{de, Deserialize, Deserializer};
 use tokio::{net::TcpListener, signal};
 use tower_http::trace::TraceLayer;
@@ -16,6 +24,7 @@ use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, 
 struct Config {
 	tracing: TracingConfig,
 	http: HttpConfig,
+	fflogs: FflogsConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,8 +60,17 @@ async fn main() -> anyhow::Result<()> {
 	let layer = tracing_subscriber::fmt::layer().with_filter(filter);
 	tracing_subscriber::registry().with(layer).init();
 
+	let client = Client::new();
+	let fflogs_client = FflogsClient {
+		client,
+		config: config.fflogs,
+	};
+
 	let router = Router::new()
-		.route("/", get(root))
+		.route(
+			"/proxy/fflogs/*path",
+			get(proxy_fflogs).with_state(fflogs_client),
+		)
 		.layer(TraceLayer::new_for_http());
 
 	let address = config.http.address;
@@ -94,7 +112,47 @@ async fn shutdown_signal() {
 	tracing::info!("shutdown signal received")
 }
 
+#[derive(Debug, Deserialize, Clone)]
+struct FflogsConfig {
+	url: String,
+	key: String,
+}
+
+#[derive(Deserialize)]
+struct ProxyFflogsPath {
+	path: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProxyFFlogsQuery {
+	#[serde(flatten)]
+	rest: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+struct FflogsClient {
+	client: Client,
+	config: FflogsConfig,
+}
+
 #[debug_handler]
-async fn root() -> impl IntoResponse {
-	"scaffold"
+async fn proxy_fflogs(
+	Path(ProxyFflogsPath { path }): Path<ProxyFflogsPath>,
+	Query(query): Query<ProxyFFlogsQuery>,
+	State(client): State<FflogsClient>,
+) -> impl IntoResponse {
+	let upstream_url = format!("{}{path}", client.config.url);
+
+	let response = client
+		.client
+		.get(upstream_url)
+		.query(&query.rest)
+		.query(&[("api_key", &client.config.key)])
+		.send()
+		.await
+		.map_err(|err| err.without_url())
+		.expect("TODO");
+
+	// TODO: echo the response code &c
+	Body::from_stream(response.bytes_stream())
 }

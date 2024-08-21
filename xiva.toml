@@ -3,3 +3,7 @@ level = "debug"
 
 [http]
 address = "0.0.0.0:8080"
+
+[fflogs]
+url = "https://www.fflogs.com/v1/"
+# key = "XIVA_FFLOGS_KEY"
