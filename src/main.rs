@@ -1,12 +1,53 @@
+use std::{net::SocketAddr, str::FromStr};
+
+use anyhow::Context;
 use axum::{debug_handler, response::IntoResponse, routing::get, serve, Router};
+use figment::{
+	providers::{Env, Format, Toml},
+	Figment,
+};
+use serde::{de, Deserialize, Deserializer};
 use tokio::{net::TcpListener, signal};
 use tower_http::trace::TraceLayer;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
+#[derive(Debug, Deserialize)]
+struct Config {
+	tracing: TracingConfig,
+	http: HttpConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct TracingConfig {
+	#[serde(deserialize_with = "deserialize_level")]
+	level: LevelFilter,
+}
+
+fn deserialize_level<'de, D>(deserializer: D) -> Result<LevelFilter, D::Error>
+where
+	D: Deserializer<'de>,
+{
+	let string = String::deserialize(deserializer)?;
+	LevelFilter::from_str(&string).map_err(de::Error::custom)
+}
+
+#[derive(Debug, Deserialize)]
+struct HttpConfig {
+	address: SocketAddr,
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-	let filter = filter::Targets::new().with_default(LevelFilter::DEBUG);
+	let figment = Figment::new()
+		.merge(Toml::file("xiva.toml"))
+		.merge(Env::prefixed("XIVA_").split("_"));
+
+	let config = figment
+		.extract::<Config>()
+		.context("failed to extract config")?;
+
+	let filter = filter::Targets::new().with_default(config.tracing.level);
 	let layer = tracing_subscriber::fmt::layer().with_filter(filter);
 	tracing_subscriber::registry().with(layer).init();
 
@@ -14,7 +55,11 @@ async fn main() -> anyhow::Result<()> {
 		.route("/", get(root))
 		.layer(TraceLayer::new_for_http());
 
-	let listener = TcpListener::bind("0.0.0.0:8080").await.unwrap();
+	let address = config.http.address;
+	tracing::info!("http binding to {address:?}");
+	let listener = TcpListener::bind(address)
+		.await
+		.context("failed to bind listener")?;
 	serve(listener, router)
 		.with_graceful_shutdown(shutdown_signal())
 		.await
