@@ -5,7 +5,7 @@ use axum::{
 	body::Body,
 	debug_handler,
 	extract::{Path, Query, State},
-	response::IntoResponse,
+	response::{IntoResponse, Redirect},
 	routing::get,
 	serve, Router,
 };
@@ -25,6 +25,7 @@ struct Config {
 	tracing: TracingConfig,
 	http: HttpConfig,
 	fflogs: FflogsConfig,
+	xivapi: XivapiConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -62,14 +63,22 @@ async fn main() -> anyhow::Result<()> {
 
 	let client = Client::new();
 	let fflogs_client = FflogsClient {
-		client,
+		client: client.clone(),
 		config: config.fflogs,
+	};
+	let xivapi_client = XivapiClient {
+		client,
+		config: config.xivapi,
 	};
 
 	let router = Router::new()
 		.route(
 			"/proxy/fflogs/*path",
 			get(proxy_fflogs).with_state(fflogs_client),
+		)
+		.route(
+			"/xivapi/zone-banner/:zone_id",
+			get(xivapi_zone_banner).with_state(xivapi_client),
 		)
 		// TODO: should probably limit the origins
 		.layer(CorsLayer::permissive())
@@ -120,7 +129,7 @@ struct FflogsConfig {
 	key: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct ProxyFflogsPath {
 	path: String,
 }
@@ -157,4 +166,111 @@ async fn proxy_fflogs(
 
 	// TODO: echo the response code &c
 	Body::from_stream(response.bytes_stream())
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct XivapiConfig {
+	url: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct XivapiZoneBannerPath {
+	zone_id: u32,
+}
+
+#[derive(Debug, Clone)]
+struct XivapiClient {
+	client: Client,
+	config: XivapiConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum XivapiResponse<T> {
+	Error(XivapiError),
+	Success(T),
+}
+
+#[derive(Debug, Deserialize)]
+struct XivapiError {
+	code: u16,
+	message: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct XivapiSheet<F> {
+	// schema: String,
+	#[serde(flatten)]
+	row: XivapiSheetRow<F>,
+}
+
+#[derive(Debug, Deserialize)]
+struct XivapiRelationship<F> {
+	// value: u32,
+	// sheet: String,
+	#[serde(flatten)]
+	row: XivapiSheetRow<F>,
+}
+
+#[derive(Debug, Deserialize)]
+struct XivapiSheetRow<F> {
+	// row_id: u32,
+	fields: F,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct XivapiZoneBannerFields {
+	content_finder_condition: XivapiRelationship<XivapiZoneBannerCFCFields>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct XivapiZoneBannerCFCFields {
+	image: XivapiImage,
+}
+
+#[derive(Debug, Deserialize)]
+struct XivapiImage {
+	// id: u32,
+	// path: String,
+	path_hr1: String,
+}
+
+#[debug_handler]
+async fn xivapi_zone_banner(
+	Path(path): Path<XivapiZoneBannerPath>,
+	State(client): State<XivapiClient>,
+) -> impl IntoResponse {
+	// TODO: cache
+
+	let upstream_url = format!("{}sheet/TerritoryType/{}", client.config.url, path.zone_id);
+	let response = client
+		.client
+		.get(upstream_url)
+		.query(&[
+			("fields", "ContentFinderCondition.Image"),
+			("transient", ""),
+		])
+		.send()
+		.await
+		.expect("TODO");
+
+	type ZoneBannerResponse = XivapiResponse<XivapiSheet<XivapiZoneBannerFields>>;
+	let xivapi_response = match response.json::<ZoneBannerResponse>().await.expect("TODO") {
+		XivapiResponse::Error(error) => todo!("xivapi error {error:?}"),
+		XivapiResponse::Success(value) => value,
+	};
+
+	let image_path = xivapi_response
+		.row
+		.fields
+		.content_finder_condition
+		.row
+		.fields
+		.image
+		.path_hr1;
+
+	let target_url = format!("{}asset/{image_path}?format=png", client.config.url);
+	Redirect::temporary(&target_url)
 }
