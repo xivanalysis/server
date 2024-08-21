@@ -16,7 +16,7 @@ use figment::{
 use reqwest::Client;
 use serde::{de, Deserialize, Deserializer};
 use tokio::{net::TcpListener, signal};
-use tower_http::trace::TraceLayer;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -71,6 +71,8 @@ async fn main() -> anyhow::Result<()> {
 			"/proxy/fflogs/*path",
 			get(proxy_fflogs).with_state(fflogs_client),
 		)
+		// TODO: should probably limit the origins
+		.layer(CorsLayer::permissive())
 		.layer(TraceLayer::new_for_http());
 
 	let address = config.http.address;
