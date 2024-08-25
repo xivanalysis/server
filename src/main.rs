@@ -1,4 +1,10 @@
-use std::{collections::HashMap, net::SocketAddr, path::PathBuf, str::FromStr};
+use std::{
+	collections::HashMap,
+	net::SocketAddr,
+	path::PathBuf,
+	str::FromStr,
+	sync::{Arc, RwLock},
+};
 
 use anyhow::{anyhow, Context};
 use axum::{
@@ -78,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
 	let xivapi_client = XivapiClient {
 		client: reqwest_client,
 		config: config.xivapi,
+		cache: Default::default(),
 	};
 
 	let router = Router::new()
@@ -215,6 +222,7 @@ struct XivapiZoneBannerPath {
 struct XivapiClient {
 	client: Client,
 	config: XivapiConfig,
+	cache: Arc<RwLock<HashMap<u32, String>>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -273,12 +281,14 @@ struct XivapiImage {
 
 #[debug_handler]
 async fn xivapi_zone_banner(
-	Path(path): Path<XivapiZoneBannerPath>,
+	Path(XivapiZoneBannerPath { zone_id }): Path<XivapiZoneBannerPath>,
 	State(client): State<XivapiClient>,
 ) -> Result<impl IntoResponse> {
-	// TODO: cache
+	if let Some(url) = client.cache.read().expect("poisoned").get(&zone_id) {
+		return Ok(Redirect::temporary(url));
+	}
 
-	let upstream_url = format!("{}sheet/TerritoryType/{}", client.config.url, path.zone_id);
+	let upstream_url = format!("{}sheet/TerritoryType/{}", client.config.url, zone_id);
 	let response = client
 		.client
 		.get(upstream_url)
@@ -310,6 +320,13 @@ async fn xivapi_zone_banner(
 		.path_hr1;
 
 	let target_url = format!("{}asset/{image_path}?format=png", client.config.url);
+
+	client
+		.cache
+		.write()
+		.expect("poisoned")
+		.insert(zone_id, target_url.clone());
+
 	Ok(Redirect::temporary(&target_url))
 }
 
