@@ -1,22 +1,32 @@
-use std::{collections::HashMap, net::SocketAddr, str::FromStr};
+use std::{
+	collections::HashMap, convert::Infallible, net::SocketAddr, path::PathBuf, str::FromStr,
+};
 
 use anyhow::Context;
 use axum::{
+	async_trait,
 	body::Body,
 	debug_handler,
-	extract::{Path, Query, State},
+	extract::{FromRef, FromRequestParts, Host, Path, Query, Request, State},
+	http::request::Parts,
 	response::{IntoResponse, Redirect},
 	routing::get,
-	serve, Router,
+	serve, RequestPartsExt, Router,
 };
 use figment::{
 	providers::{Env, Format, Toml},
+	value::magic::RelativePathBuf,
 	Figment,
 };
 use reqwest::Client;
 use serde::{de, Deserialize, Deserializer};
 use tokio::{net::TcpListener, signal};
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower::ServiceExt;
+use tower_http::{
+	cors::CorsLayer,
+	services::{ServeDir, ServeFile},
+	trace::TraceLayer,
+};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -26,6 +36,7 @@ struct Config {
 	http: HttpConfig,
 	fflogs: FflogsConfig,
 	xivapi: XivapiConfig,
+	client: AssetPathConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -61,13 +72,13 @@ async fn main() -> anyhow::Result<()> {
 	let layer = tracing_subscriber::fmt::layer().with_filter(filter);
 	tracing_subscriber::registry().with(layer).init();
 
-	let client = Client::new();
+	let reqwest_client = Client::new();
 	let fflogs_client = FflogsClient {
-		client: client.clone(),
+		client: reqwest_client.clone(),
 		config: config.fflogs,
 	};
 	let xivapi_client = XivapiClient {
-		client,
+		client: reqwest_client,
 		config: config.xivapi,
 	};
 
@@ -80,6 +91,7 @@ async fn main() -> anyhow::Result<()> {
 			"/xivapi/zone-banner/:zone_id",
 			get(xivapi_zone_banner).with_state(xivapi_client),
 		)
+		.fallback(get(client).with_state(config.client))
 		// TODO: should probably limit the origins
 		.layer(CorsLayer::permissive())
 		.layer(TraceLayer::new_for_http());
@@ -191,6 +203,7 @@ enum XivapiResponse<T> {
 	Success(T),
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct XivapiError {
 	code: u16,
@@ -273,4 +286,61 @@ async fn xivapi_zone_banner(
 
 	let target_url = format!("{}asset/{image_path}?format=png", client.config.url);
 	Redirect::temporary(&target_url)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AssetPathConfig {
+	public_path: RelativePathBuf,
+	default_branch: String,
+}
+
+struct AssetPath(PathBuf);
+
+#[async_trait]
+impl<S> FromRequestParts<S> for AssetPath
+where
+	S: Send + Sync,
+	AssetPathConfig: FromRef<S>,
+{
+	type Rejection = Infallible;
+
+	async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+		let config = AssetPathConfig::from_ref(state);
+		let base_path = config.public_path.relative();
+
+		// Client can control the host (because headers, because I can't get the
+		// request target??) - ensure that we're staying inside the public path.
+		let path_valid = |path: &PathBuf| path.starts_with(&base_path) && path.exists();
+
+		let Host(host) = parts.extract().await.expect("TODO");
+
+		// Try using the first domain - this will fail for i.e. a subdomain-less url.
+		if let Some((subdomain, _)) = host.split_once('.') {
+			let path = base_path.join(subdomain);
+			if path_valid(&path) {
+				return Ok(Self(path));
+			}
+		}
+
+		// Try with the default branch.
+		let path = base_path.join(config.default_branch);
+		if path_valid(&path) {
+			return Ok(Self(path));
+		}
+
+		// Default also failed, fall back to a flat public path.
+		if path_valid(&base_path) {
+			return Ok(Self(base_path));
+		}
+
+		// Fallback also failed, error out.
+		todo!("rejection")
+	}
+}
+
+#[debug_handler(state = AssetPathConfig)]
+async fn client(AssetPath(asset_path): AssetPath, request: Request) -> impl IntoResponse {
+	let service =
+		ServeDir::new(&asset_path).fallback(ServeFile::new(asset_path.join("index.html")));
+	service.oneshot(request).await
 }

@@ -2,7 +2,7 @@
 level = "debug"
 
 [http]
-address = "0.0.0.0:8080"
+address = "0.0.0.0:3000"
 
 [fflogs]
 url = "https://www.fflogs.com/v1/"
@@ -10,3 +10,7 @@ url = "https://www.fflogs.com/v1/"
 
 [xivapi]
 url = "https://beta.xivapi.com/api/1/"
+
+[client]
+public_path = "public"
+default_branch = "dawntrail"
