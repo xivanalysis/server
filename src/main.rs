@@ -27,6 +27,7 @@ use serde::{de, Deserialize, Deserializer};
 use tokio::{net::TcpListener, signal};
 use tower::ServiceExt;
 use tower_http::{
+	compression::CompressionLayer,
 	cors::CorsLayer,
 	services::{ServeDir, ServeFile},
 	trace::TraceLayer,
@@ -90,7 +91,9 @@ async fn main() -> anyhow::Result<()> {
 	let router = Router::new()
 		.route(
 			"/proxy/fflogs/*path",
-			get(proxy_fflogs).with_state(fflogs_client),
+			get(proxy_fflogs)
+				.with_state(fflogs_client)
+				.layer(CompressionLayer::new()),
 		)
 		.route(
 			"/xivapi/zone-banner/:zone_id",
