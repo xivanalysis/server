@@ -1,15 +1,13 @@
-use std::{
-	collections::HashMap, convert::Infallible, net::SocketAddr, path::PathBuf, str::FromStr,
-};
+use std::{collections::HashMap, net::SocketAddr, path::PathBuf, str::FromStr};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use axum::{
 	async_trait,
 	body::Body,
 	debug_handler,
 	extract::{FromRef, FromRequestParts, Host, Path, Query, Request, State},
-	http::{request::Parts, Response},
-	response::{IntoResponse, Redirect},
+	http::{request::Parts, StatusCode},
+	response::{IntoResponse, Redirect, Response},
 	routing::get,
 	serve, RequestPartsExt, Router,
 };
@@ -135,6 +133,24 @@ async fn shutdown_signal() {
 	tracing::info!("shutdown signal received")
 }
 
+// Don't expose the inner error, it'll probably contain api keys and shit.
+#[derive(Debug, thiserror::Error)]
+#[error("an error occured")]
+struct Error {
+	#[from]
+	inner: anyhow::Error,
+}
+
+impl IntoResponse for Error {
+	fn into_response(self) -> Response {
+		tracing::error!("{}", self.inner);
+
+		(StatusCode::INTERNAL_SERVER_ERROR, self.to_string()).into_response()
+	}
+}
+
+type Result<T, E = Error> = std::result::Result<T, E>;
+
 #[derive(Debug, Deserialize, Clone)]
 struct FflogsConfig {
 	url: String,
@@ -163,10 +179,10 @@ async fn proxy_fflogs(
 	Path(ProxyFflogsPath { path }): Path<ProxyFflogsPath>,
 	Query(query): Query<ProxyFFlogsQuery>,
 	State(client): State<FflogsClient>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse> {
 	let upstream_url = format!("{}{path}", client.config.url);
 
-	let response = client
+	let reqwest_response = client
 		.client
 		.get(upstream_url)
 		.query(&query.rest)
@@ -174,13 +190,15 @@ async fn proxy_fflogs(
 		.send()
 		.await
 		.map_err(|err| err.without_url())
-		.expect("TODO");
+		.context("request failed")?;
 
-	let mut response_builder = Response::builder().status(response.status());
-	*response_builder.headers_mut().unwrap() = response.headers().clone();
-	response_builder
-		.body(Body::from_stream(response.bytes_stream()))
-		.unwrap()
+	let mut response_builder = Response::builder().status(reqwest_response.status());
+	*response_builder.headers_mut().unwrap() = reqwest_response.headers().clone();
+	let response = response_builder
+		.body(Body::from_stream(reqwest_response.bytes_stream()))
+		.unwrap();
+
+	Ok(response)
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -257,7 +275,7 @@ struct XivapiImage {
 async fn xivapi_zone_banner(
 	Path(path): Path<XivapiZoneBannerPath>,
 	State(client): State<XivapiClient>,
-) -> impl IntoResponse {
+) -> Result<impl IntoResponse> {
 	// TODO: cache
 
 	let upstream_url = format!("{}sheet/TerritoryType/{}", client.config.url, path.zone_id);
@@ -270,11 +288,15 @@ async fn xivapi_zone_banner(
 		])
 		.send()
 		.await
-		.expect("TODO");
+		.context("request failed")?;
 
 	type ZoneBannerResponse = XivapiResponse<XivapiSheet<XivapiZoneBannerFields>>;
-	let xivapi_response = match response.json::<ZoneBannerResponse>().await.expect("TODO") {
-		XivapiResponse::Error(error) => todo!("xivapi error {error:?}"),
+	let xivapi_response = match response
+		.json::<ZoneBannerResponse>()
+		.await
+		.context("invalid response")?
+	{
+		XivapiResponse::Error(error) => Err(anyhow!("xivapi error {error:?}"))?,
 		XivapiResponse::Success(value) => value,
 	};
 
@@ -288,7 +310,7 @@ async fn xivapi_zone_banner(
 		.path_hr1;
 
 	let target_url = format!("{}asset/{image_path}?format=png", client.config.url);
-	Redirect::temporary(&target_url)
+	Ok(Redirect::temporary(&target_url))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -305,7 +327,7 @@ where
 	S: Send + Sync,
 	AssetPathConfig: FromRef<S>,
 {
-	type Rejection = Infallible;
+	type Rejection = Error;
 
 	async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
 		let config = AssetPathConfig::from_ref(state);
@@ -315,7 +337,7 @@ where
 		// request target??) - ensure that we're staying inside the public path.
 		let path_valid = |path: &PathBuf| path.starts_with(&base_path) && path.exists();
 
-		let Host(host) = parts.extract().await.expect("TODO");
+		let Host(host) = parts.extract().await.context("no host information")?;
 
 		// Try using the first domain - this will fail for i.e. a subdomain-less url.
 		if let Some((subdomain, _)) = host.split_once('.') {
@@ -337,7 +359,7 @@ where
 		}
 
 		// Fallback also failed, error out.
-		todo!("rejection")
+		Err(anyhow!("cold not derive a valid base asset path"))?
 	}
 }
 
