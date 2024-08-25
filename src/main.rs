@@ -8,7 +8,7 @@ use axum::{
 	body::Body,
 	debug_handler,
 	extract::{FromRef, FromRequestParts, Host, Path, Query, Request, State},
-	http::request::Parts,
+	http::{request::Parts, Response},
 	response::{IntoResponse, Redirect},
 	routing::get,
 	serve, RequestPartsExt, Router,
@@ -176,8 +176,11 @@ async fn proxy_fflogs(
 		.map_err(|err| err.without_url())
 		.expect("TODO");
 
-	// TODO: echo the response code &c
-	Body::from_stream(response.bytes_stream())
+	let mut response_builder = Response::builder().status(response.status());
+	*response_builder.headers_mut().unwrap() = response.headers().clone();
+	response_builder
+		.body(Body::from_stream(response.bytes_stream()))
+		.unwrap()
 }
 
 #[derive(Debug, Deserialize, Clone)]
