@@ -32,8 +32,7 @@ struct LimitConfig {
 }
 
 pub fn router(config: Config, cancel: CancellationToken) -> Router {
-	// Limit to 4 requests per minute. Navigating to an analysis typically takes 2
-	// requests, so we're allowing for 5x that to be extra safe.
+	// Set up the rate limiting governor.
 	let governor_config = GovernorConfigBuilder::default()
 		.key_extractor(SmartIpKeyExtractor)
 		.period(Duration::from_secs(config.limit.recover_secs))

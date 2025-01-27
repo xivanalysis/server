@@ -9,6 +9,8 @@ url = "https://www.fflogs.com/v1/"
 # key = "XIVA_FFLOGS_KEY"
 
 [fflogs.limit]
+# Limit to 4 requests per minute. Navigating to an analysis typically takes 2
+# requests, so we're allowing for 5x that to be extra safe.
 burst = 10
 recover_secs = 15
 
