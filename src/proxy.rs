@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use anyhow::Context;
 use axum::{
@@ -10,7 +10,10 @@ use axum::{
 	Router,
 };
 use serde::Deserialize;
-use tower_http::compression::CompressionLayer;
+use tokio_util::sync::CancellationToken;
+use tower_governor::{
+	governor::GovernorConfigBuilder, key_extractor::SmartIpKeyExtractor, GovernorLayer,
+};
 
 use super::error::Result;
 
@@ -18,9 +21,46 @@ use super::error::Result;
 pub struct Config {
 	url: String,
 	key: String,
+
+	limit: LimitConfig,
 }
 
-pub fn router(config: Config) -> Router {
+#[derive(Debug, Deserialize, Clone)]
+struct LimitConfig {
+	burst: u32,
+	recover_secs: u64,
+}
+
+pub fn router(config: Config, cancel: CancellationToken) -> Router {
+	// Limit to 4 requests per minute. Navigating to an analysis typically takes 2
+	// requests, so we're allowing for 5x that to be extra safe.
+	let governor_config = GovernorConfigBuilder::default()
+		.key_extractor(SmartIpKeyExtractor)
+		.period(Duration::from_secs(config.limit.recover_secs))
+		.burst_size(config.limit.burst)
+		.finish()
+		.expect("governor config should be valid");
+
+	let governor_config = Arc::new(governor_config);
+
+	// Perform regular maintenance on the governor.
+	let governor_limiter = governor_config.limiter().clone();
+	tokio::spawn(async move {
+		loop {
+			tokio::select! {
+				_ = cancel.cancelled() => {
+					tracing::debug!("governor maintenance cancelled");
+					break;
+				}
+				_ = tokio::time::sleep(Duration::from_secs(60)) => {
+					let live = governor_limiter.len();
+					tracing::debug!(live, "governor maintenance");
+					governor_limiter.retain_recent();
+				}
+			}
+		}
+	});
+
 	let state = FflogsState {
 		client: reqwest::Client::new(),
 		config,
@@ -28,8 +68,10 @@ pub fn router(config: Config) -> Router {
 
 	Router::new()
 		.route("/fflogs/*path", get(fflogs))
+		.layer(GovernorLayer {
+			config: governor_config,
+		})
 		.with_state(state)
-		.layer(CompressionLayer::new())
 }
 
 #[derive(Debug, Deserialize)]

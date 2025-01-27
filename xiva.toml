@@ -8,6 +8,10 @@ address = "0.0.0.0:3000"
 url = "https://www.fflogs.com/v1/"
 # key = "XIVA_FFLOGS_KEY"
 
+[fflogs.limit]
+burst = 10
+recover_secs = 15
+
 [xivapi]
 url = "https://beta.xivapi.com/api/1/"
 
