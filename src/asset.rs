@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use anyhow::{anyhow, Context};
 use axum::{
 	async_trait, debug_handler,
-	extract::{FromRef, FromRequestParts, Host, Request},
-	http::request::Parts,
+	extract::{FromRef, FromRequestParts, Host, Request, State},
+	handler::Handler,
+	http::{request::Parts, StatusCode},
 	response::IntoResponse,
 	routing::{get, MethodRouter},
 	RequestPartsExt,
@@ -24,6 +25,31 @@ pub struct Config {
 
 pub fn method_router(config: Config) -> MethodRouter {
 	get(client).with_state(config)
+}
+
+#[debug_handler(state = Config)]
+async fn client(AssetPath(asset_path): AssetPath, request: Request) -> impl IntoResponse {
+	let service = ServeDir::new(&asset_path).fallback(fuck.with_state(asset_path));
+	service.oneshot(request).await
+}
+
+#[debug_handler]
+async fn fuck(
+	State(asset_path): State<PathBuf>,
+	request: Request,
+) -> Result<impl IntoResponse, StatusCode> {
+	// If the request is targeting the assets dir, hard fail it.
+	if request.uri().path().starts_with("/assets") {
+		return Err(StatusCode::NOT_FOUND);
+	}
+
+	// Otherwise, it might be a frontend route, respond with the client index
+	let response = ServeFile::new(asset_path.join("index.html"))
+		.oneshot(request)
+		.await
+		.expect("infallible");
+
+	Ok(response)
 }
 
 struct AssetPath(PathBuf);
@@ -68,11 +94,4 @@ where
 		// Fallback also failed, error out.
 		Err(anyhow!("cold not derive a valid base asset path"))?
 	}
-}
-
-#[debug_handler(state = Config)]
-async fn client(AssetPath(asset_path): AssetPath, request: Request) -> impl IntoResponse {
-	let service =
-		ServeDir::new(&asset_path).fallback(ServeFile::new(asset_path.join("index.html")));
-	service.oneshot(request).await
 }
